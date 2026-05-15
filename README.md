@@ -57,7 +57,7 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-MSRV: Rust 1.78.
+MSRV: Rust 1.85 (bumped from 1.78 on 2026-05-15 — see `DESIGN.md` §7 entry `MSRV-v0.2`).
 
 ## License
 

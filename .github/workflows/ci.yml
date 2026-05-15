@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.78
+        uses: dtolnay/rust-toolchain@1.85
         with:
           components: rustfmt, clippy
 

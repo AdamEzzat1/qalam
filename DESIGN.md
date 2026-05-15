@@ -228,6 +228,7 @@ Decisions that should not be re-derived without an explicit `arch-change` propos
 | C3 | 5 crates in Phase 1 (collapsed from 8) | 2026-05-15 | Boundaries = stability/substitutability, not org |
 | C4 | Strict cross-OS CI determinism gate from v0.1 | 2026-05-15 | Cheaper than retroactive |
 | C5 | JSONL trace format, Concise/Full levels | 2026-05-15 | Streamable, diff-able, jq-friendly |
+| MSRV-v0.2 | MSRV bumped 1.78 -> 1.85 | 2026-05-15 | edition2024 stabilization needed: transitive deps (getrandom 0.4.x, hashbrown 0.17.x, WASI bindgen) require it. Pinning each in Cargo.lock was brittle; 1.85 has been mainstream since Feb 2025. |
 
 ---
 

@@ -1,3 +1,7 @@
 [toolchain]
-channel = "1.78"
+# Bumped from 1.78 -> 1.85 on 2026-05-15 (see DESIGN.md §7, decision MSRV-v0.2)
+# 1.85 stabilizes Rust edition 2024; without it, transitive deps that have
+# adopted edition2024 syntax (getrandom 0.4.2, hashbrown 0.17.x, the whole
+# WASI bindgen chain) fail to compile under our manifest parser.
+channel = "1.85"
 components = ["rustfmt", "clippy"]

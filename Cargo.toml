@@ -11,7 +11,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.78"
+rust-version = "1.85"
 authors = ["Adam Ezzat"]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/AdamEzzat1/qalam"
