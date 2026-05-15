@@ -13,6 +13,8 @@ qalam-core = { workspace = true }
 serde = { workspace = true }
 smol_str = { workspace = true }
 smallvec = { workspace = true }
+unicode-normalization = { workspace = true }
+toml = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

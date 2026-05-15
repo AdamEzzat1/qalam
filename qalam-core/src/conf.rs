@@ -9,9 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A confidence value in `[0, 1]`, NaN-free, totally ordered.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Conf(NotNan<f32>);
 
 impl Conf {

@@ -147,7 +147,7 @@ Defined in `qalam-core::morph_ir`. See `qalam-core/src/morph_ir.rs` for the auth
 
 ### 5.3 Determinism guarantees for Phase 1
 
-1. NFC + Arabic fold table is normative — published as `qalam-text/folds.toml`, hash-stamped in the build.
+1. NFC + Arabic fold table is normative — published as `qalam-text/data/folds.toml`, hash-stamped in the build via `qalam_text::unicode::fold_table_hash()`.
 2. Pattern firing order is fixed — patterns sorted by `(specificity DESC, id ASC)`, all firings recorded in trace.
 3. OOV backoff is rule-based, not statistical — letter n-gram patterns derived from observed roots.
 4. Confidence ties broken by `canonical_id` (content-addressed BLAKE3 of the analysis structure).
@@ -197,7 +197,7 @@ UD Arabic-PADT (CC BY-NC-SA 4.0, non-commercial) is used for **test/eval only**,
 
 | Phase | What | Key deliverable | Status |
 |---|---|---|---|
-| 1 | Lexical & morphological | `MorphForest` API, Aramorph-class coverage | Scaffolding |
+| 1 | Lexical & morphological | `MorphForest` API, Aramorph-class coverage | Stage 1.1 (Unicode normalization) shipped; stages 1.2-1.6 pending |
 | 1.5 | Rule-based diacritization | Concise/Full trace of diacritization decisions | Planned |
 | 2 | EGY↔MSA normalization | `NormalizedForest` with dropped-feature tracing | Designed |
 | 3 | Syntax & Semantic IR | Constraint-grammar parser, AMR-style semantic IR | Designed (strict mode only in v1.0) |

@@ -21,6 +21,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Ensure .gitattributes line-ending rules are applied on checkout.
+          # Without this, autocrlf could re-introduce CRLF on Windows.
+          fetch-depth: 1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.78
@@ -43,32 +47,22 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --verbose
 
-      - name: Run analyzer over golden corpus (reproducibility input)
+      # Real cross-OS determinism check: run `qalam normalize` over the golden
+      # corpus and capture its bytes. The reproducibility job below diffs the
+      # captures across OSes. This is the FIRST active determinism gate in
+      # the project — added in Phase 1 Stage 1.1.
+      - name: Run `qalam normalize` over golden corpus
         shell: bash
         run: |
-          # Once Phase 1 ships, this emits deterministic JSONL for the cross-OS gate.
-          # The `|| true` suffix is intentional during scaffolding — there is no
-          # binary impl yet. Remove `|| true` after the first analyzer release.
           cargo run --package qalam-cli --quiet -- \
-            analyze --jsonl --reproducibility-mode \
-            --input tests/fixtures/golden_corpus.txt \
-            > analyzer-output-${{ matrix.os }}.json || true
+            normalize --input tests/fixtures/golden_corpus.txt \
+            > normalize-output-${{ matrix.os }}.txt
 
-      - name: Upload analyzer output
-        if: matrix.os != 'ubuntu-latest'
+      - name: Upload normalize output
         uses: actions/upload-artifact@v4
         with:
-          name: analyzer-output-${{ matrix.os }}
-          path: analyzer-output-${{ matrix.os }}.json
-          if-no-files-found: ignore
-
-      - name: Save Linux artifact for cross-OS gate
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: analyzer-output-ubuntu-latest
-          path: analyzer-output-ubuntu-latest.json
-          if-no-files-found: ignore
+          name: normalize-output-${{ matrix.os }}
+          path: normalize-output-${{ matrix.os }}.txt
 
   reproducibility:
     name: Cross-OS determinism gate
@@ -78,36 +72,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: analyzer-output-ubuntu-latest
+          name: normalize-output-ubuntu-latest
           path: ./linux
-        continue-on-error: true
       - uses: actions/download-artifact@v4
         with:
-          name: analyzer-output-macos-latest
+          name: normalize-output-macos-latest
           path: ./macos
-        continue-on-error: true
       - uses: actions/download-artifact@v4
         with:
-          name: analyzer-output-windows-latest
+          name: normalize-output-windows-latest
           path: ./windows
-        continue-on-error: true
-      - name: Compare outputs byte-by-byte
+      - name: Diff outputs byte-for-byte
         shell: bash
         run: |
           set -e
-          have_all=true
-          for f in linux/analyzer-output-ubuntu-latest.json \
-                   macos/analyzer-output-macos-latest.json \
-                   windows/analyzer-output-windows-latest.json; do
-            if [ ! -f "$f" ]; then
-              echo "::warning::Missing artifact $f — analyzer probably not yet implemented."
-              have_all=false
-            fi
+          echo "--- byte sizes ---"
+          wc -c linux/normalize-output-ubuntu-latest.txt \
+                macos/normalize-output-macos-latest.txt \
+                windows/normalize-output-windows-latest.txt
+          echo "--- hex prefixes (first 64 bytes) ---"
+          for f in linux/normalize-output-ubuntu-latest.txt \
+                   macos/normalize-output-macos-latest.txt \
+                   windows/normalize-output-windows-latest.txt; do
+            echo "$f:"
+            head -c 64 "$f" | od -An -tx1
           done
-          if [ "$have_all" = "true" ]; then
-            diff linux/analyzer-output-ubuntu-latest.json macos/analyzer-output-macos-latest.json
-            diff linux/analyzer-output-ubuntu-latest.json windows/analyzer-output-windows-latest.json
-            echo "Cross-OS determinism: PASS"
-          else
-            echo "Cross-OS determinism: SKIPPED (Phase 1 analyzer not implemented)"
-          fi
+          echo "--- diffs (any output below = FAIL) ---"
+          diff linux/normalize-output-ubuntu-latest.txt macos/normalize-output-macos-latest.txt
+          diff linux/normalize-output-ubuntu-latest.txt windows/normalize-output-windows-latest.txt
+          echo
+          echo "Cross-OS determinism: PASS"

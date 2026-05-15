@@ -1,0 +1,60 @@
+# Qalam Arabic normative fold table.
+#
+# Each entry under `[[map]]` is a (source, target) pair: when the source
+# character appears in input, replace it with the target.
+#
+# The top-level `strip` array lists characters to remove from input entirely.
+# It MUST appear before any `[[map]]` headers — in TOML, all keys after a
+# table header belong to that table until the next header.
+#
+# Determinism contract:
+#   - The fold-table hash advertised by `qalam_text::unicode::fold_table_hash`
+#     is `BLAKE3(bytes of this file)`. Any change to the bytes — including
+#     whitespace and comments — changes the hash, which changes every
+#     analysis's provenance.
+#   - `normalize` is idempotent. This requires that no fold target is also a
+#     fold source, and no fold target appears in `strip`. This invariant is
+#     asserted at startup; violating it panics on first call.
+#
+# Scope for v0.1 (deliberately conservative):
+#   - Fold the four alef-variant letters to bare alef. These differ only by
+#     attached diacritic marks (hamza-above, hamza-below, madda, wasla) and
+#     are routinely interchanged in undiacritized text.
+#   - Strip tatweel (U+0640), a decorative letter-elongation mark with no
+#     linguistic content.
+#   - PRESERVE: ة (teh marbuta), ى (alef maqsura), all hamza-bearing letters
+#     (ء ؤ ئ), all diacritics, and digits in any script.
+#
+# Reasoning for what is NOT folded in v0.1:
+#   - ؤ -> و and ئ -> ي are sometimes folded by aggressive normalizers, but
+#     these carry distinct phonological information (glottal stop on a
+#     waw/yeh carrier) that downstream stages should not be denied.
+#   - ى -> ي is an Egyptian-orthography convention; folding it in MSA loses
+#     genuine grammatical information (e.g. on alef-maqsura-final verbs).
+#   - ة -> ه is informal Egyptian shorthand only; never appropriate in MSA.
+
+# Strip set: characters removed entirely from output.
+#   - Tatweel (U+0640): decorative letter-elongation mark, no linguistic content.
+#
+# IMPORTANT: this top-level key must appear BEFORE any [[map]] table headers.
+strip = ["ـ"]
+
+# Alef with hamza above -> bare alef.
+[[map]]
+from = "أ"
+to = "ا"
+
+# Alef with hamza below -> bare alef.
+[[map]]
+from = "إ"
+to = "ا"
+
+# Alef with madda above -> bare alef.
+[[map]]
+from = "آ"
+to = "ا"
+
+# Alef wasla -> bare alef.
+[[map]]
+from = "ٱ"
+to = "ا"

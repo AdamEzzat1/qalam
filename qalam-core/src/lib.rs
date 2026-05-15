@@ -15,8 +15,8 @@ pub mod trace;
 pub use conf::Conf;
 pub use error::{QalamError, Result};
 pub use morph_ir::{
-    Aspect, ByteSpan, Case, Clitic, CliticId, FeatureSet, Gender, MorphAnalysis, MorphForest,
-    Mood, Number, PatternId, Person, Pos, Register, Root, State, Stem, Voice,
+    Aspect, ByteSpan, Case, Clitic, CliticId, FeatureSet, Gender, Mood, MorphAnalysis, MorphForest,
+    Number, PatternId, Person, Pos, Register, Root, State, Stem, Voice,
 };
 pub use provenance::{ContentHash, LexEntryId, Provenance, RuleId};
 pub use trace::{Trace, TraceEvent, TraceLevel};

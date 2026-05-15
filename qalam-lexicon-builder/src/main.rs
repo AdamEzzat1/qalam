@@ -8,7 +8,11 @@
 use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(name = "qalam-lexicon-builder", version, about = "Build a Qalam lexicon FST from open sources.")]
+#[command(
+    name = "qalam-lexicon-builder",
+    version,
+    about = "Build a Qalam lexicon FST from open sources."
+)]
 struct Args {
     /// Input directory containing source data files.
     #[arg(short, long)]
