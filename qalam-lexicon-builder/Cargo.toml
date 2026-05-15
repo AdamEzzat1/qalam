@@ -1,0 +1,20 @@
+[package]
+name = "qalam-lexicon-builder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Build-time tool: ingest open Arabic lexicon sources and emit a Qalam lexicon FST artifact."
+
+[[bin]]
+name = "qalam-lexicon-builder"
+path = "src/main.rs"
+
+[dependencies]
+qalam-core = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

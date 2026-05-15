@@ -1,0 +1,18 @@
+[package]
+name = "qalam-text"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Unicode normalization, tokenization, and clitic splitting for Arabic text."
+
+[dependencies]
+qalam-core = { workspace = true }
+serde = { workspace = true }
+smol_str = { workspace = true }
+smallvec = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

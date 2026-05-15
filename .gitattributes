@@ -1,0 +1,17 @@
+# Enforce LF line endings on checkout for ALL text files, regardless of OS.
+#
+# Rationale: Qalam's determinism contract requires bit-identical output across
+# Linux, macOS, and Windows. Any data file embedded via `include_str!` or
+# `include_bytes!` must therefore have identical bytes on every platform.
+# Without this, Git's default `autocrlf` on Windows would convert LF to CRLF
+# on checkout and silently break cross-OS reproducibility.
+
+* text=auto eol=lf
+
+# Explicit overrides for known binary types (in case of future additions).
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.fst binary

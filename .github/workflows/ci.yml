@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.78
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo build
+        run: cargo build --workspace --verbose
+
+      - name: cargo test
+        run: cargo test --workspace --verbose
+
+      - name: Run analyzer over golden corpus (reproducibility input)
+        shell: bash
+        run: |
+          # Once Phase 1 ships, this emits deterministic JSONL for the cross-OS gate.
+          # The `|| true` suffix is intentional during scaffolding — there is no
+          # binary impl yet. Remove `|| true` after the first analyzer release.
+          cargo run --package qalam-cli --quiet -- \
+            analyze --jsonl --reproducibility-mode \
+            --input tests/fixtures/golden_corpus.txt \
+            > analyzer-output-${{ matrix.os }}.json || true
+
+      - name: Upload analyzer output
+        if: matrix.os != 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-output-${{ matrix.os }}
+          path: analyzer-output-${{ matrix.os }}.json
+          if-no-files-found: ignore
+
+      - name: Save Linux artifact for cross-OS gate
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-output-ubuntu-latest
+          path: analyzer-output-ubuntu-latest.json
+          if-no-files-found: ignore
+
+  reproducibility:
+    name: Cross-OS determinism gate
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: analyzer-output-ubuntu-latest
+          path: ./linux
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: analyzer-output-macos-latest
+          path: ./macos
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: analyzer-output-windows-latest
+          path: ./windows
+        continue-on-error: true
+      - name: Compare outputs byte-by-byte
+        shell: bash
+        run: |
+          set -e
+          have_all=true
+          for f in linux/analyzer-output-ubuntu-latest.json \
+                   macos/analyzer-output-macos-latest.json \
+                   windows/analyzer-output-windows-latest.json; do
+            if [ ! -f "$f" ]; then
+              echo "::warning::Missing artifact $f — analyzer probably not yet implemented."
+              have_all=false
+            fi
+          done
+          if [ "$have_all" = "true" ]; then
+            diff linux/analyzer-output-ubuntu-latest.json macos/analyzer-output-macos-latest.json
+            diff linux/analyzer-output-ubuntu-latest.json windows/analyzer-output-windows-latest.json
+            echo "Cross-OS determinism: PASS"
+          else
+            echo "Cross-OS determinism: SKIPPED (Phase 1 analyzer not implemented)"
+          fi

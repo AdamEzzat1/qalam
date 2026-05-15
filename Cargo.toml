@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "qalam-core",
+    "qalam-text",
+    "qalam-morph",
+    "qalam-lexicon-builder",
+    "qalam-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+authors = ["Adam Ezzat"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/AdamEzzat1/qalam"
+homepage = "https://github.com/AdamEzzat1/qalam"
+readme = "README.md"
+keywords = ["arabic", "nlp", "morphology", "linguistics", "deterministic"]
+categories = ["text-processing", "science"]
+
+[workspace.dependencies]
+qalam-core = { path = "qalam-core", version = "0.1.0" }
+qalam-text = { path = "qalam-text", version = "0.1.0" }
+qalam-morph = { path = "qalam-morph", version = "0.1.0" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ordered-float = { version = "4.2", features = ["serde"] }
+smol_str = { version = "0.2", features = ["serde"] }
+smallvec = { version = "1.13", features = ["serde", "const_generics", "union"] }
+indexmap = { version = "2.2", features = ["serde"] }
+blake3 = { version = "1.5", features = ["serde"] }
+thiserror = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+proptest = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+debug = true
