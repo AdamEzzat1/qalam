@@ -18,3 +18,8 @@ toml = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "text"
+harness = false
