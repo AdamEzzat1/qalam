@@ -5,33 +5,37 @@
 //! `(clitic split, root candidate)` pair becomes one `MorphAnalysis`; their
 //! confidences combine via `Conf::and`; the forest is ranked and top-k capped.
 //!
-//! Provenance at this depth: no lexicon exists yet, so `lexicon_hash` is a
-//! documented sentinel (`qalam:no-lexicon:v0`) meaning "no lexicon consulted",
-//! and `provenance.rules` records the pattern IDs that actually fired — the
-//! real provenance content available before a lexicon ships.
+//! Provenance: `lexicon_hash` is the hash of the bootstrap lexicon. An analysis
+//! whose extracted root is confirmed by the lexicon records the entry id in
+//! `provenance.lex_entries` and is promoted; unconfirmed (likely spurious)
+//! pattern matches are down-weighted; recognized particles are promoted.
 
 use qalam_core::{
-    ByteSpan, Conf, ContentHash, FeatureSet, MorphAnalysis, MorphForest, Provenance, RuleId, Stem,
-    TraceLevel,
+    ByteSpan, Conf, ContentHash, FeatureSet, MorphAnalysis, MorphForest, Pos, Provenance, RuleId,
+    Stem, TraceLevel,
 };
 use qalam_text::clitics::{self, CliticSplit};
 use qalam_text::tokenize::{tokenize, Token, TokenKind};
+use qalam_text::unicode;
 use smallvec::SmallVec;
 use smol_str::SmolStr;
 
+use crate::lexicon::{BootstrapLexicon, Lexicon};
 use crate::patterns::{PatternMatch, PatternTable};
 use crate::roots;
 
-/// Sentinel hashed into `Provenance.lexicon_hash` until a real lexicon ships.
-const NO_LEXICON: &[u8] = b"qalam:no-lexicon:v0";
-
-/// Confidence factor applied to an analysis that found NO strong root.
+/// Confidence floor contributed by a lexicon-confirmed root (via noisy-or).
+/// Confirming an extracted root against the lexicon is strong positive evidence.
+const LEXICON_CONFIRM: f32 = 0.7;
+/// Confidence factor for an extracted root NOT in the lexicon — likely a
+/// spurious pattern match, so down-weighted.
+const UNCONFIRMED_PENALTY: f32 = 0.4;
+/// Confidence floor for a recognized particle (closed-class function word).
+const PARTICLE_CONFIRM: f32 = 0.85;
+/// Confidence factor for an analysis that found neither a root nor a particle.
 ///
-/// Recovering a known pattern is positive evidence, so a rootless analysis is
-/// down-weighted relative to a rooted one on the same clitic split. Without
-/// this, AND-combining `clitic × pattern` (both < 1) would make rooted analyses
-/// rank *below* their rootless siblings — surfacing the spurious reading. This
-/// is a deterministic placeholder prior until lexicon validation arrives.
+/// Without it, AND-combining `clitic × pattern` (both < 1) would make rooted
+/// analyses rank *below* their rootless siblings — surfacing spurious readings.
 const UNANALYZED_PENALTY: f32 = 0.3;
 
 /// Runtime configuration for the analyzer.
@@ -84,6 +88,7 @@ pub trait Analyzer: Send + Sync {
 pub struct BasicAnalyzer {
     config: AnalyzerConfig,
     patterns: PatternTable,
+    lexicon: BootstrapLexicon,
 }
 
 impl Default for BasicAnalyzer {
@@ -97,6 +102,7 @@ impl BasicAnalyzer {
         Self {
             config,
             patterns: PatternTable::builtin(),
+            lexicon: BootstrapLexicon::load(),
         }
     }
 
@@ -144,28 +150,60 @@ impl BasicAnalyzer {
         split: &CliticSplit,
         rc: Option<&PatternMatch>,
     ) -> MorphAnalysis {
-        let (root, pattern, confidence, pos) = match rc {
-            Some(m) => (
-                Some(m.root.clone()),
-                Some(m.pattern),
-                split.confidence.and(m.confidence),
-                self.patterns.pos_of(m.pattern),
-            ),
-            None => (
-                None,
-                None,
-                split.confidence.and(Conf::clamp(UNANALYZED_PENALTY)),
-                None,
-            ),
+        let mut provenance = Provenance::new(self.lexicon_hash());
+        let (root, pattern, pos, confidence) = match rc {
+            Some(m) => {
+                provenance.rules.push(RuleId(m.pattern.0));
+                let base = split.confidence.and(m.confidence);
+                let pos = self.patterns.pos_of(m.pattern);
+                match self.lexicon.root_id(&m.root) {
+                    Some(eid) => {
+                        // Confirmed root: strong positive evidence -> promote.
+                        provenance.lex_entries.push(eid);
+                        (
+                            Some(m.root.clone()),
+                            Some(m.pattern),
+                            pos,
+                            base.or(Conf::clamp(LEXICON_CONFIRM)),
+                        )
+                    }
+                    None => {
+                        // Extracted but unconfirmed: likely spurious -> demote.
+                        (
+                            Some(m.root.clone()),
+                            Some(m.pattern),
+                            pos,
+                            base.and(Conf::clamp(UNCONFIRMED_PENALTY)),
+                        )
+                    }
+                }
+            }
+            None => {
+                // No root. Recognized particle, or genuinely unanalyzed.
+                let key = unicode::strip_tashkil(&unicode::normalize(split.stem.surface.as_str()));
+                match self.lexicon.particle_id(&key) {
+                    Some(eid) => {
+                        provenance.lex_entries.push(eid);
+                        (
+                            None,
+                            None,
+                            Some(Pos::Part),
+                            split.confidence.or(Conf::clamp(PARTICLE_CONFIRM)),
+                        )
+                    }
+                    None => (
+                        None,
+                        None,
+                        None,
+                        split.confidence.and(Conf::clamp(UNANALYZED_PENALTY)),
+                    ),
+                }
+            }
         };
         let features = FeatureSet {
             pos,
             ..FeatureSet::default()
         };
-        let mut provenance = Provenance::new(self.lexicon_hash());
-        if let Some(m) = rc {
-            provenance.rules.push(RuleId(m.pattern.0));
-        }
         MorphAnalysis {
             surface: token.raw.clone(),
             span: token.span,
@@ -216,7 +254,7 @@ impl Analyzer for BasicAnalyzer {
     }
 
     fn lexicon_hash(&self) -> ContentHash {
-        ContentHash::of(NO_LEXICON)
+        self.lexicon.hash()
     }
 
     fn config_hash(&self) -> ContentHash {
@@ -307,8 +345,38 @@ mod tests {
     }
 
     #[test]
-    fn lexicon_hash_is_stable_sentinel() {
+    fn lexicon_hash_is_the_bootstrap_hash() {
         let a = BasicAnalyzer::default();
-        assert_eq!(a.lexicon_hash(), ContentHash::of(b"qalam:no-lexicon:v0"));
+        assert_eq!(
+            a.lexicon_hash(),
+            crate::lexicon::BootstrapLexicon::load().hash()
+        );
+        assert_eq!(a.lexicon_hash().as_str().len(), 64);
+    }
+
+    #[test]
+    fn lexicon_confirmed_root_ranks_first() {
+        let a = BasicAnalyzer::default();
+        // كتاب: root ك-ت-ب is in the bootstrap lexicon, so the rooted analysis
+        // must be promoted above the spurious ك- proclitic split.
+        let best = a.analyze_token("كتاب");
+        let top = best.best().expect("non-empty forest");
+        assert_eq!(
+            top.root.as_ref().map(|r| r.radicals.as_slice()),
+            Some(['ك', 'ت', 'ب'].as_slice()),
+            "lexicon-confirmed root should be the top analysis",
+        );
+        // And its provenance records a lexicon entry.
+        assert!(!top.provenance.lex_entries.is_empty());
+    }
+
+    #[test]
+    fn particle_is_recognized() {
+        let a = BasicAnalyzer::default();
+        // في is a particle; its top analysis should be POS=Part with no root.
+        let forest = a.analyze_token("في");
+        let top = forest.best().expect("non-empty forest");
+        assert_eq!(top.features.pos, Some(Pos::Part));
+        assert!(top.root.is_none());
     }
 }

@@ -8,6 +8,10 @@ breaking changes may occur in any minor release; they are called out under
 ## [Unreleased]
 
 ### Added
+- `qalam_morph::lexicon::BootstrapLexicon` — a curated bootstrap lexicon (~65
+  strong roots + particles) embedded from `data/lexicon.toml`, hash-stamped;
+  implements a `Lexicon` trait so an FST-backed lexicon can replace it later
+  without analyzer changes. (The full open-source ingestion is Stage 1.5b.)
 - `qalam_text::unicode::strip_tashkil` — diacritic/tatweel stripping for the
   morphological matching skeleton (separate from `normalize`, which preserves
   diacritics).
@@ -22,6 +26,13 @@ breaking changes may occur in any minor release; they are called out under
 - **`qalam analyze` is now real** — emits a `MorphForest` per token
   (text / `--jsonl` / `--strict` / `--reproducibility-mode`).
 - CI cross-OS determinism gate now also covers `qalam analyze`.
+
+### Changed
+- Analyzer now consults the bootstrap lexicon: lexicon-confirmed roots are
+  promoted, unconfirmed (likely spurious) pattern matches are down-weighted,
+  and recognized particles are tagged `POS=Part`. `Provenance.lexicon_hash` is
+  now the real bootstrap-lexicon hash (the `qalam:no-lexicon` sentinel is
+  retired); confirmed analyses record their lexicon entry in `lex_entries`.
 - `qalam_text::tokenize` — raw-anchored tokenizer that segments text at
   script-class boundaries (Arabic / Latin / Digit / Punct / Whitespace / Other)
   and normalizes each token's surface separately.

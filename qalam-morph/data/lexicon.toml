@@ -1,0 +1,33 @@
+# Qalam bootstrap lexicon (v0.1).
+#
+# This is a small, hand-curated bootstrap — NOT the full open-source lexicon.
+# The full lexicon (UD-NYUAD, Wiktionary, Tatoeba, MADAR, AraVec → FST) is data
+# engineering deferred to Stage 1.5b. This bootstrap exists to wire lexicon
+# lookup into the analyzer end-to-end: it lets the analyzer confirm extracted
+# roots (promoting real roots, suppressing spurious pattern matches) and gives
+# provenance a real `lexicon_hash` instead of the `no-lexicon` sentinel.
+#
+# Determinism: the lexicon hash is BLAKE3 of this file's bytes (incl. comments).
+#
+# `roots`: common STRONG triliteral roots, written as the 3 radicals joined
+# (no separators). Only strong roots are listed because the v0.1 matcher emits
+# strong roots only; weak roots (containing و/ي/ا/hamza) are added when the
+# weak-root stage lands.
+roots = [
+  "كتب", "درس", "علم", "فعل", "عمل", "ذهب", "جلس", "سمع", "نظر", "كلم",
+  "فهم", "خرج", "دخل", "رجع", "جمع", "رسل", "حمل", "طلب", "ضرب", "فتح",
+  "حسب", "شرب", "حفظ", "شكر", "صبر", "غفر", "حكم", "ملك", "خلق", "رزق",
+  "عبد", "سجد", "حسن", "كبر", "صغر", "كثر", "قرب", "عرف", "حضر", "ختم",
+  "قدم", "نقص", "ربح", "خسر", "كسب", "نصر", "شهد", "بحث", "كشف", "قطع",
+  "رفع", "جعل", "صنع", "سلم", "نزل", "حدث", "نقل", "بدل", "سكن", "ركب",
+  "لعب", "صرف", "عدل", "ظلم", "صدق", "كذب",
+]
+
+# `particles`: common closed-class words (not root-derived). Used to mark
+# function words so the analyzer does not down-weight them as "unanalyzed".
+particles = [
+  "في", "من", "الى", "على", "عن", "مع", "هذا", "هذه", "ذلك", "تلك",
+  "الذي", "التي", "هو", "هي", "هم", "نحن", "انا", "انت", "ان", "كان",
+  "قد", "لم", "لن", "لا", "ما", "هل", "او", "ثم", "لكن", "بل",
+  "حتى", "اذا", "لو", "عند", "بعد", "قبل", "بين",
+]
