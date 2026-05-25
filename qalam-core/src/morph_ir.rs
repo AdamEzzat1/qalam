@@ -8,7 +8,19 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use smol_str::SmolStr;
 
-/// A byte span into the source text.
+/// A byte span into the **raw** input text.
+///
+/// Qalam anchors *every* span to the original (raw) input bytes, never to the
+/// normalized form. Normalization ([`crate`] consumers call
+/// `qalam_text::unicode::normalize`) can change byte length — it strips tatweel
+/// and may recompose under NFC — so a span into normalized text would not map
+/// back to the user's document. Keeping all spans raw-anchored means a
+/// downstream consumer can always recover the source slice with
+/// `&raw_input[span.start as usize .. span.end as usize]`.
+///
+/// Consequence for the pipeline: tokenization runs on raw text (not
+/// pre-normalized text) and normalizes each token's surface separately. See
+/// `qalam_text::tokenize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ByteSpan {
     pub start: u32,

@@ -47,22 +47,28 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --verbose
 
-      # Real cross-OS determinism check: run `qalam normalize` over the golden
-      # corpus and capture its bytes. The reproducibility job below diffs the
-      # captures across OSes. This is the FIRST active determinism gate in
-      # the project — added in Phase 1 Stage 1.1.
-      - name: Run `qalam normalize` over golden corpus
+      # Real cross-OS determinism check: run the implemented CLI commands over
+      # the golden corpus and capture their bytes into one combined artifact.
+      # The reproducibility job below diffs the captures across OSes. Covers
+      # `normalize` (Stage 1.1) and `freq` (this PR: tokenize + frequency).
+      - name: Capture deterministic CLI output over golden corpus
         shell: bash
         run: |
-          cargo run --package qalam-cli --quiet -- \
-            normalize --input tests/fixtures/golden_corpus.txt \
-            > normalize-output-${{ matrix.os }}.txt
+          {
+            echo "## normalize"
+            cargo run --package qalam-cli --quiet -- \
+              normalize --input tests/fixtures/golden_corpus.txt
+            echo
+            echo "## freq"
+            cargo run --package qalam-cli --quiet -- \
+              freq --input tests/fixtures/golden_corpus.txt
+          } > cli-output-${{ matrix.os }}.txt
 
-      - name: Upload normalize output
+      - name: Upload CLI output
         uses: actions/upload-artifact@v4
         with:
-          name: normalize-output-${{ matrix.os }}
-          path: normalize-output-${{ matrix.os }}.txt
+          name: cli-output-${{ matrix.os }}
+          path: cli-output-${{ matrix.os }}.txt
 
   reproducibility:
     name: Cross-OS determinism gate
@@ -72,33 +78,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: normalize-output-ubuntu-latest
+          name: cli-output-ubuntu-latest
           path: ./linux
       - uses: actions/download-artifact@v4
         with:
-          name: normalize-output-macos-latest
+          name: cli-output-macos-latest
           path: ./macos
       - uses: actions/download-artifact@v4
         with:
-          name: normalize-output-windows-latest
+          name: cli-output-windows-latest
           path: ./windows
       - name: Diff outputs byte-for-byte
         shell: bash
         run: |
           set -e
+          L=linux/cli-output-ubuntu-latest.txt
+          M=macos/cli-output-macos-latest.txt
+          W=windows/cli-output-windows-latest.txt
           echo "--- byte sizes ---"
-          wc -c linux/normalize-output-ubuntu-latest.txt \
-                macos/normalize-output-macos-latest.txt \
-                windows/normalize-output-windows-latest.txt
+          wc -c "$L" "$M" "$W"
           echo "--- hex prefixes (first 64 bytes) ---"
-          for f in linux/normalize-output-ubuntu-latest.txt \
-                   macos/normalize-output-macos-latest.txt \
-                   windows/normalize-output-windows-latest.txt; do
+          for f in "$L" "$M" "$W"; do
             echo "$f:"
             head -c 64 "$f" | od -An -tx1
           done
           echo "--- diffs (any output below = FAIL) ---"
-          diff linux/normalize-output-ubuntu-latest.txt macos/normalize-output-macos-latest.txt
-          diff linux/normalize-output-ubuntu-latest.txt windows/normalize-output-windows-latest.txt
+          diff "$L" "$M"
+          diff "$L" "$W"
           echo
-          echo "Cross-OS determinism: PASS"
+          echo "Cross-OS determinism: PASS (normalize + freq, x86_64 + aarch64)"
