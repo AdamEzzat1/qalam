@@ -62,6 +62,10 @@ jobs:
             echo "## freq"
             cargo run --package qalam-cli --quiet -- \
               freq --input tests/fixtures/golden_corpus.txt
+            echo
+            echo "## segment"
+            cargo run --package qalam-cli --quiet -- \
+              segment --input tests/fixtures/golden_corpus.txt
           } > cli-output-${{ matrix.os }}.txt
 
       - name: Upload CLI output

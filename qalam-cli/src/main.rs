@@ -4,6 +4,7 @@
 //! - `analyze` — run the morphological analyzer over input text
 //! - `normalize` — apply Unicode normalization only
 //! - `freq` — word-frequency list grouped by normalized form
+//! - `segment` — clitic-splitting forest per Arabic token
 //! - `version` — print the version and lexicon hash
 
 use clap::{Parser, Subcommand};
@@ -59,6 +60,17 @@ enum Cmd {
         jsonl: bool,
     },
 
+    /// Clitic-splitting forest for each Arabic token.
+    Segment {
+        /// Input file path; `-` for stdin.
+        #[arg(short, long)]
+        input: String,
+
+        /// Emit machine-readable JSONL (one token per line) instead of text.
+        #[arg(long)]
+        jsonl: bool,
+    },
+
     /// Print version information.
     Version,
 }
@@ -69,6 +81,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::Analyze { .. } => anyhow::bail!("analyze: implemented in a future PR"),
         Cmd::Normalize { input } => run_normalize(&input),
         Cmd::Freq { input, jsonl } => run_freq(&input, jsonl),
+        Cmd::Segment { input, jsonl } => run_segment(&input, jsonl),
         Cmd::Version => {
             println!("qalam {}", env!("CARGO_PKG_VERSION"));
             println!(
@@ -126,6 +139,56 @@ fn run_freq(path: &str, jsonl: bool) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Read input, tokenize, and print the clitic-splitting forest for each Arabic
+/// token. Non-Arabic tokens are skipped (they carry only the identity split).
+///
+/// Output is deterministic: tokens in source order, splits already ranked by
+/// `(confidence DESC, stem ASC)`. Lines use `\n` on every platform.
+fn run_segment(path: &str, jsonl: bool) -> anyhow::Result<()> {
+    let text = read_input(path)?;
+    let tokens = qalam_text::tokenize::tokenize(&text);
+
+    let stdout = std::io::stdout();
+    let mut h = stdout.lock();
+    for t in &tokens {
+        if t.kind != qalam_text::tokenize::TokenKind::Arabic {
+            continue;
+        }
+        let splits = qalam_text::clitics::split(t);
+        if jsonl {
+            let line = serde_json::json!({
+                "token": t.raw.as_str(),
+                "span": [t.span.start, t.span.end],
+                "splits": splits.as_slice(),
+            });
+            writeln!(h, "{}", serde_json::to_string(&line)?)?;
+        } else {
+            writeln!(h, "{}  [{}..{}]", t.raw, t.span.start, t.span.end)?;
+            for s in &splits {
+                writeln!(h, "    {:.3}  {}", s.confidence.value(), fmt_split(s))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Render one clitic split as `proc+proc · stem · enc` for human reading.
+fn fmt_split(s: &qalam_text::clitics::CliticSplit) -> String {
+    let mut out = String::new();
+    if !s.proclitics.is_empty() {
+        let procs: Vec<&str> = s.proclitics.iter().map(|c| c.form.as_str()).collect();
+        out.push_str(&procs.join("+"));
+        out.push_str(" · ");
+    }
+    out.push_str(s.stem.surface.as_str());
+    if !s.enclitics.is_empty() {
+        let encs: Vec<&str> = s.enclitics.iter().map(|c| c.form.as_str()).collect();
+        out.push_str(" · ");
+        out.push_str(&encs.join("+"));
+    }
+    out
 }
 
 fn read_input(path: &str) -> anyhow::Result<String> {
