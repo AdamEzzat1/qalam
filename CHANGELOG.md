@@ -13,12 +13,16 @@ breaking changes may occur in any minor release; they are called out under
   and normalizes each token's surface separately.
 - `qalam_text::freq` — word-frequency aggregation grouping tokens by normalized
   form, recording raw variants and first position; deterministic ranking.
-- `qalam freq` CLI subcommand (human text and `--jsonl`).
+- `qalam_text::clitics` — proclitic/enclitic segmentation producing a *forest*
+  of candidate splits (always incl. the identity "no split"); raw-anchored
+  clitic spans; deterministic ranking with the identity ranked highest pending
+  lexicon-based re-ranking. Over-generates by design.
+- `qalam freq` and `qalam segment` CLI subcommands (human text and `--jsonl`).
 - `qalam-text/benches/text.rs` — criterion benchmarks for normalize / tokenize /
-  freq, measured against the throughput targets in DESIGN.md §5.5.
+  freq / clitics, measured against the throughput targets in DESIGN.md §5.5.
 - `qalam-text/tests/reproducibility.rs` — determinism + raw-span-coverage tests
   over the golden corpus.
-- CI cross-OS determinism gate now also covers `qalam freq` output.
+- CI cross-OS determinism gate now covers `normalize`, `freq`, and `segment`.
 
 ### Changed
 - **Span contract (breaking, pre-1.0):** every `ByteSpan` now anchors to the

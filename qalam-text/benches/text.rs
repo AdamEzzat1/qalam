@@ -5,7 +5,7 @@
 //! single-threaded). Run with `cargo bench -p qalam-text`.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use qalam_text::{freq, tokenize, unicode};
+use qalam_text::{clitics, freq, tokenize, unicode};
 
 /// A representative paragraph of MSA prose, including alef variants and tatweel
 /// so the normalizer does real work.
@@ -48,5 +48,26 @@ fn bench_freq(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_normalize, bench_tokenize, bench_freq);
+fn bench_clitics(c: &mut Criterion) {
+    let text = sample();
+    let tokens = tokenize::tokenize(&text);
+    let mut group = c.benchmark_group("clitics");
+    group.throughput(Throughput::Elements(tokens.len() as u64));
+    group.bench_function("paragraph_x200", |b| {
+        b.iter(|| {
+            for t in black_box(&tokens) {
+                let _ = clitics::split(t);
+            }
+        })
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_normalize,
+    bench_tokenize,
+    bench_freq,
+    bench_clitics
+);
 criterion_main!(benches);
