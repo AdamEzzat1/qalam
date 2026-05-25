@@ -78,7 +78,12 @@ enum Cmd {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
-        Cmd::Analyze { .. } => anyhow::bail!("analyze: implemented in a future PR"),
+        Cmd::Analyze {
+            input,
+            jsonl,
+            strict,
+            reproducibility_mode,
+        } => run_analyze(&input, jsonl, strict, reproducibility_mode),
         Cmd::Normalize { input } => run_normalize(&input),
         Cmd::Freq { input, jsonl } => run_freq(&input, jsonl),
         Cmd::Segment { input, jsonl } => run_segment(&input, jsonl),
@@ -139,6 +144,90 @@ fn run_freq(path: &str, jsonl: bool) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Read input and run the full morphological analyzer, printing a `MorphForest`
+/// per non-whitespace token.
+///
+/// `--jsonl` / `--reproducibility-mode` emit one JSON `MorphForest` per line
+/// (the form the cross-OS determinism gate diffs). `--strict` fails if any
+/// token has more than one analysis (unresolved ambiguity).
+fn run_analyze(path: &str, jsonl: bool, strict: bool, repro: bool) -> anyhow::Result<()> {
+    use qalam_morph::Analyzer;
+    let text = read_input(path)?;
+    let analyzer = qalam_morph::BasicAnalyzer::default();
+    let forests = analyzer.analyze_text(&text);
+
+    if strict {
+        for f in &forests {
+            anyhow::ensure!(
+                f.analyses.len() <= 1,
+                "strict mode: unresolved ambiguity for {:?} ({} analyses)",
+                f.token.as_str(),
+                f.analyses.len()
+            );
+        }
+    }
+
+    let stdout = std::io::stdout();
+    let mut h = stdout.lock();
+    if jsonl || repro {
+        for f in &forests {
+            writeln!(h, "{}", serde_json::to_string(f)?)?;
+        }
+    } else {
+        for f in &forests {
+            let trunc = if f.truncated { " (truncated)" } else { "" };
+            writeln!(
+                h,
+                "{}  [{}..{}]{}",
+                f.token, f.span.start, f.span.end, trunc
+            )?;
+            for an in &f.analyses {
+                let root = an
+                    .root
+                    .as_ref()
+                    .map(|r| {
+                        r.radicals
+                            .iter()
+                            .map(|c| c.to_string())
+                            .collect::<Vec<_>>()
+                            .join("-")
+                    })
+                    .unwrap_or_else(|| "—".to_string());
+                let pat = an
+                    .pattern
+                    .map(|p| p.0.to_string())
+                    .unwrap_or_else(|| "—".to_string());
+                writeln!(
+                    h,
+                    "    {:.3}  {}  root={}  pat={}",
+                    an.confidence.value(),
+                    fmt_analysis(an),
+                    root,
+                    pat
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Render a MorphAnalysis segmentation as `proc+proc · stem · enc`.
+fn fmt_analysis(an: &qalam_core::MorphAnalysis) -> String {
+    let mut out = String::new();
+    if !an.proclitics.is_empty() {
+        let procs: Vec<&str> = an.proclitics.iter().map(|c| c.form.as_str()).collect();
+        out.push_str(&procs.join("+"));
+        out.push_str(" · ");
+    }
+    out.push_str(an.stem.surface.as_str());
+    if !an.enclitics.is_empty() {
+        let encs: Vec<&str> = an.enclitics.iter().map(|c| c.form.as_str()).collect();
+        out.push_str(" · ");
+        out.push_str(&encs.join("+"));
+    }
+    out
 }
 
 /// Read input, tokenize, and print the clitic-splitting forest for each Arabic

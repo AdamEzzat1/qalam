@@ -165,6 +165,30 @@ pub fn fold_table_hash() -> ContentHash {
     fold_table().hash.clone()
 }
 
+/// Remove Arabic diacritics (tashkīl) and tatweel, leaving the consonant +
+/// long-vowel skeleton used for morphological pattern matching.
+///
+/// This is deliberately *separate* from [`normalize`], which preserves
+/// diacritics (P6: diacritics are input variation, not noise). The morphology
+/// layer needs a diacritic-free view to align stems against templatic patterns;
+/// the rest of the pipeline does not.
+///
+/// Strips: harakat / tanwin / shadda / sukun (U+064B–U+065F), superscript
+/// (dagger) alef U+0670, and tatweel U+0640.
+pub fn strip_tashkil(input: &str) -> String {
+    input.chars().filter(|c| !is_tashkil(*c)).collect()
+}
+
+fn is_tashkil(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0640}'              // tatweel
+        | '\u{064B}'
+            ..='\u{065F}' // tanwin, harakat, shadda, sukun, extended
+        | '\u{0670}' // superscript (dagger) alef
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +262,16 @@ mod tests {
     fn preserves_non_arabic() {
         // Pass-through for Latin, digits, punctuation, whitespace.
         assert_eq!(normalize("Hello 123 world."), "Hello 123 world.");
+    }
+
+    #[test]
+    fn strip_tashkil_removes_diacritics_only() {
+        // كَتَبَ -> كتب (harakat removed, consonants kept)
+        assert_eq!(strip_tashkil("كَتَبَ"), "كتب");
+        // No diacritics: unchanged.
+        assert_eq!(strip_tashkil("كتاب"), "كتاب");
+        // Tatweel also stripped.
+        assert_eq!(strip_tashkil("كــتاب"), "كتاب");
     }
 
     #[test]
