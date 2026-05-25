@@ -7,6 +7,7 @@ pub mod lexicon;
 pub mod patterns;
 pub mod roots;
 
-pub use analyzer::{Analyzer, AnalyzerConfig, DialectHint};
+pub use analyzer::{Analyzer, AnalyzerConfig, BasicAnalyzer, DialectHint};
 pub use lexicon::{LexEntry, Lexicon};
-pub use patterns::{Pattern, PatternMatch, PatternTable};
+pub use patterns::{Pattern, PatternMatch, PatternTable, Slot};
+pub use roots::{analyze_stem, best_root, RootCandidate};

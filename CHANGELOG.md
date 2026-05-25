@@ -8,6 +8,20 @@ breaking changes may occur in any minor release; they are called out under
 ## [Unreleased]
 
 ### Added
+- `qalam_text::unicode::strip_tashkil` — diacritic/tatweel stripping for the
+  morphological matching skeleton (separate from `normalize`, which preserves
+  diacritics).
+- `qalam_morph::patterns` — templatic patterns in ف/ع/ل measure notation with a
+  skeleton matcher; v0.1 strong-roots-only (rejects matches whose radical is a
+  long vowel / hamza-carrier).
+- `qalam_morph::roots` — root extraction (normalize + strip-tashkil + pattern
+  match) producing (root, pattern, confidence) candidates.
+- `qalam_morph::BasicAnalyzer` — composes clitic splitting × pattern/root
+  matching into a ranked, top-k-capped `MorphForest`; provenance records fired
+  pattern IDs with a documented `qalam:no-lexicon` sentinel `lexicon_hash`.
+- **`qalam analyze` is now real** — emits a `MorphForest` per token
+  (text / `--jsonl` / `--strict` / `--reproducibility-mode`).
+- CI cross-OS determinism gate now also covers `qalam analyze`.
 - `qalam_text::tokenize` — raw-anchored tokenizer that segments text at
   script-class boundaries (Arabic / Latin / Digit / Punct / Whitespace / Other)
   and normalizes each token's surface separately.
