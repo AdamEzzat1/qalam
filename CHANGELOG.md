@@ -8,6 +8,14 @@ breaking changes may occur in any minor release; they are called out under
 ## [Unreleased]
 
 ### Added
+- **Weak-root morphology** in `qalam_morph::patterns`: hollow (قال → ق-و-ل /
+  ق-ي-ل, enumerated), defective (دعا → د-ع-و, رمى → ر-م-ي), and assimilated/
+  mithāl (وصل → و-ص-ل) Form-I patterns via a new `Slot::Weak` + `WeakResolution`.
+  `try_match` now returns multiple roots when the surface is ambiguous; the
+  lexicon disambiguates (only confirmed candidates are promoted).
+- An `[irregulars]` lexicon table (surface → root) for forms not recoverable by
+  rule — chiefly hollow/lafīf imperatives. Includes قِ → و-ق-ي (the famous
+  one-letter imperative), handled honestly as a lexical exception, not a rule.
 - `qalam_morph::lexicon::BootstrapLexicon` — a curated bootstrap lexicon (~65
   strong roots + particles) embedded from `data/lexicon.toml`, hash-stamped;
   implements a `Lexicon` trait so an FST-backed lexicon can replace it later

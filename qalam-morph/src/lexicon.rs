@@ -18,6 +18,9 @@ pub trait Lexicon: Send + Sync {
     fn root_id(&self, root: &Root) -> Option<LexEntryId>;
     /// The entry id if `surface` (normalized) is a known particle, else `None`.
     fn particle_id(&self, surface: &str) -> Option<LexEntryId>;
+    /// The (entry id, root) if `surface` (normalized, diacritics preserved) is a
+    /// known irregular form whose root is not recoverable by rule, else `None`.
+    fn irregular(&self, surface: &str) -> Option<(LexEntryId, Root)>;
     /// Content hash of the lexicon; recorded in every analysis's provenance.
     fn hash(&self) -> ContentHash;
 }
@@ -39,6 +42,8 @@ struct LexiconFile {
     roots: Vec<String>,
     #[serde(default)]
     particles: Vec<String>,
+    #[serde(default)]
+    irregulars: BTreeMap<String, String>,
 }
 
 /// The embedded bootstrap lexicon.
@@ -48,6 +53,8 @@ pub struct BootstrapLexicon {
     roots: BTreeMap<String, LexEntryId>,
     /// Particle surface (normalized) -> entry id.
     particles: BTreeMap<String, LexEntryId>,
+    /// Irregular surface (normalized, diacritics preserved) -> (id, root).
+    irregulars: BTreeMap<String, (LexEntryId, Root)>,
     hash: ContentHash,
 }
 
@@ -71,9 +78,18 @@ impl BootstrapLexicon {
         for (i, p) in parsed.particles.iter().enumerate() {
             particles.insert(p.clone(), LexEntryId(1_000_000 + i as u32));
         }
+        // BTreeMap iteration is sorted -> deterministic id assignment.
+        let mut irregulars = BTreeMap::new();
+        for (i, (surface, root_str)) in parsed.irregulars.iter().enumerate() {
+            let root = Root {
+                radicals: root_str.chars().collect(),
+            };
+            irregulars.insert(surface.clone(), (LexEntryId(2_000_000 + i as u32), root));
+        }
         Self {
             roots,
             particles,
+            irregulars,
             hash: ContentHash::of(LEXICON_TOML.as_bytes()),
         }
     }
@@ -90,6 +106,10 @@ impl Lexicon for BootstrapLexicon {
 
     fn particle_id(&self, surface: &str) -> Option<LexEntryId> {
         self.particles.get(surface).copied()
+    }
+
+    fn irregular(&self, surface: &str) -> Option<(LexEntryId, Root)> {
+        self.irregulars.get(surface).cloned()
     }
 
     fn hash(&self) -> ContentHash {
@@ -121,6 +141,29 @@ mod tests {
         let lex = BootstrapLexicon::load();
         // A nonsense skeleton not in the bootstrap.
         assert!(lex.root_id(&root("خزق")).is_none());
+    }
+
+    #[test]
+    fn weak_roots_are_present() {
+        let lex = BootstrapLexicon::load();
+        assert!(lex.root_id(&root("قول")).is_some()); // hollow
+        assert!(lex.root_id(&root("رمي")).is_some()); // defective
+        assert!(lex.root_id(&root("وصل")).is_some()); // mithal
+                                                      // The spurious hollow alternative for قال is NOT in the lexicon.
+        assert!(lex.root_id(&root("قيل")).is_none());
+    }
+
+    #[test]
+    fn irregular_forms_resolve_to_roots() {
+        let lex = BootstrapLexicon::load();
+        // قِ (with kasra) -> و-ق-ي, the famous one-letter imperative.
+        let (_, r) = lex.irregular("قِ").expect("قِ should be an irregular");
+        assert_eq!(r.radicals.as_slice(), ['و', 'ق', 'ي']);
+        // قل -> ق-و-ل
+        let (_, r2) = lex.irregular("قل").expect("قل should be an irregular");
+        assert_eq!(r2.radicals.as_slice(), ['ق', 'و', 'ل']);
+        // A normal word is not an irregular.
+        assert!(lex.irregular("كتاب").is_none());
     }
 
     #[test]

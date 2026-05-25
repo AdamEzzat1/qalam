@@ -47,10 +47,12 @@ mod tests {
     }
 
     #[test]
-    fn weak_root_stem_yields_no_strong_candidate() {
+    fn hollow_weak_stem_yields_a_root() {
         let table = PatternTable::builtin();
-        // باب (door, root ب-و-ب, weak/geminate) should not produce a strong root.
-        assert!(best_root("قال", &table).is_none());
+        // قال is hollow (ق-و-ل); since Stage 1.4b it yields a weak root,
+        // with the و candidate first.
+        let r = best_root("قال", &table).expect("hollow root");
+        assert_eq!(r.radicals.as_slice(), ['ق', 'و', 'ل']);
     }
 
     #[test]
