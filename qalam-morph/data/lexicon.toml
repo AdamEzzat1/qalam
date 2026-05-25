@@ -9,11 +9,12 @@
 #
 # Determinism: the lexicon hash is BLAKE3 of this file's bytes (incl. comments).
 #
-# `roots`: common STRONG triliteral roots, written as the 3 radicals joined
-# (no separators). Only strong roots are listed because the v0.1 matcher emits
-# strong roots only; weak roots (containing و/ي/ا/hamza) are added when the
-# weak-root stage lands.
+# `roots`: common triliteral roots, written as the 3 radicals joined (no
+# separators). Strong roots and (since Stage 1.4b) weak roots — the weak ones
+# are what let the analyzer CONFIRM an enumerated weak candidate (e.g. قال ->
+# {ق-و-ل, ق-ي-ل}; only "قول" is here, so ق-ي-ل is suppressed).
 roots = [
+  # Strong:
   "كتب", "درس", "علم", "فعل", "عمل", "ذهب", "جلس", "سمع", "نظر", "كلم",
   "فهم", "خرج", "دخل", "رجع", "جمع", "رسل", "حمل", "طلب", "ضرب", "فتح",
   "حسب", "شرب", "حفظ", "شكر", "صبر", "غفر", "حكم", "ملك", "خلق", "رزق",
@@ -21,6 +22,14 @@ roots = [
   "قدم", "نقص", "ربح", "خسر", "كسب", "نصر", "شهد", "بحث", "كشف", "قطع",
   "رفع", "جعل", "صنع", "سلم", "نزل", "حدث", "نقل", "بدل", "سكن", "ركب",
   "لعب", "صرف", "عدل", "ظلم", "صدق", "كذب",
+  # Hollow (middle weak):
+  "قول", "نوم", "زور", "خوف", "صوم", "قوم", "دور", "بيع", "سير", "طير",
+  "عيش", "زيد", "كيل", "ضيف",
+  # Defective (final weak):
+  "دعو", "رجو", "دنو", "علو", "رمي", "مشي", "سعي", "بني", "جري", "بكي",
+  "هدي",
+  # Assimilated / mithal (initial weak):
+  "وصل", "وعد", "وزن", "وجد", "وقف", "وضع", "وهب", "يسر",
 ]
 
 # `particles`: common closed-class words (not root-derived). Used to mark
@@ -31,3 +40,16 @@ particles = [
   "قد", "لم", "لن", "لا", "ما", "هل", "او", "ثم", "لكن", "بل",
   "حتى", "اذا", "لو", "عند", "بعد", "قبل", "بين",
 ]
+
+# `irregulars`: surface form (normalized, diacritics PRESERVED) -> root (joined
+# radicals). These are lexical exceptions whose root is NOT recoverable by any
+# morphophonemic rule — chiefly hollow/lafīf imperatives where weak radicals
+# vanish. The canonical example is قِ ("protect!"), the imperative of و-ق-ي,
+# a single consonant whose root is pure lexical knowledge. This is deliberately
+# a tiny curated table, documented as a hack, not a rule.
+[irregulars]
+"قِ" = "وقي"   # imperative of و-ق-ي "protect" (the famous one-letter sentence)
+"قل" = "قول"   # imperative of قال "say" (hollow, middle و drops)
+"قم" = "قوم"   # imperative of قام "stand"
+"بع" = "بيع"   # imperative of باع "sell" (hollow, middle ي drops)
+"نم" = "نوم"   # imperative of نام "sleep"

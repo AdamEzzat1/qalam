@@ -30,7 +30,7 @@ Qalam is OSS-redistributable (Apache-2.0 + MIT), deterministic, and explainable 
 
 | Phase | What | Status |
 |---|---|---|
-| 1   | Lexical & morphological foundation | In progress — normalize, tokenize, clitics, strong-root morphology, `analyze`, + bootstrap lexicon shipped; weak roots + full open-source lexicon pending |
+| 1   | Lexical & morphological foundation | In progress — normalize, tokenize, clitics, strong + weak-root morphology, `analyze`, bootstrap lexicon shipped; only full open-source lexicon ingestion pending |
 | 1.5 | Rule-based diacritization | Planned |
 | 2   | Egyptian ↔ MSA normalization | Designed |
 | 3   | Syntax & semantic IR | Designed (strict mode only in v1.0) |

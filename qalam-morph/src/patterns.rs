@@ -15,13 +15,33 @@ use qalam_core::{Conf, PatternId, Pos, Root};
 use smallvec::SmallVec;
 use smol_str::SmolStr;
 
+/// How a weak radical's hidden identity is recovered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeakResolution {
+    /// The radical is و (recoverable, e.g. defective ending in ا).
+    Waw,
+    /// The radical is ي (recoverable, e.g. defective ending in ى).
+    Ya,
+    /// Surface does not reveal which — enumerate BOTH و and ي candidates
+    /// (e.g. hollow perfect قال, whose ا hides either). The lexicon disambiguates.
+    WawOrYa,
+}
+
 /// One position in a pattern template.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
-    /// Captures the radical at this 0-based index (0=ف, 1=ع, 2=ل).
+    /// Captures a strong radical at this 0-based index (0=ف, 1=ع, 2=ل).
+    /// Rejects long vowels / hamza-carriers.
     Radical(u8),
     /// A literal character that must match the stem exactly.
     Literal(char),
+    /// A weak radical: the stem must show `surface` at this position; the
+    /// radical's identity is given by `resolves`.
+    Weak {
+        idx: u8,
+        surface: char,
+        resolves: WeakResolution,
+    },
 }
 
 /// A templatic pattern: its measure-notation template, parsed slots, the POS it
@@ -79,34 +99,87 @@ impl Pattern {
         }
     }
 
+    /// Construct a pattern from explicit slots (used for weak patterns whose
+    /// surface can't be written in ف/ع/ل notation).
+    fn weak(id: u32, template: &str, slots: &[Slot], pos: Pos, prior: f32) -> Self {
+        Pattern {
+            id: PatternId(id),
+            template: SmolStr::new(template),
+            slots: slots.iter().copied().collect(),
+            pos,
+            prior,
+        }
+    }
+
     /// Try to match a diacritic-stripped stem (as a char slice) against this
-    /// pattern. Returns the captured root, or `None` if lengths differ, a
-    /// literal mismatches, or a captured radical is weak (long vowel / hamza).
-    pub fn try_match(&self, chars: &[char]) -> Option<Root> {
+    /// pattern. Returns the captured root(s): empty if lengths differ, a literal
+    /// or weak-surface mismatches, or a strong radical slot captured a weak
+    /// letter. A hollow pattern with a `WawOrYa` slot returns TWO candidates.
+    pub fn try_match(&self, chars: &[char]) -> SmallVec<[Root; 2]> {
+        let mut out: SmallVec<[Root; 2]> = SmallVec::new();
         if self.slots.len() != chars.len() {
-            return None;
+            return out;
         }
         let mut radicals: [Option<char>; 3] = [None; 3];
+        let mut ambiguous: Option<usize> = None;
         for (slot, &ch) in self.slots.iter().zip(chars) {
             match slot {
                 Slot::Literal(l) => {
                     if *l != ch {
-                        return None;
+                        return out;
                     }
                 }
                 Slot::Radical(i) => {
                     if is_weak_radical(ch) {
-                        return None; // strong-roots-only: defer weak roots
+                        return out; // strong slot must hold a strong consonant
                     }
                     radicals[*i as usize] = Some(ch);
                 }
+                Slot::Weak {
+                    idx,
+                    surface,
+                    resolves,
+                } => {
+                    if *surface != ch {
+                        return out; // expected weak realization absent
+                    }
+                    match resolves {
+                        WeakResolution::Waw => radicals[*idx as usize] = Some('و'),
+                        WeakResolution::Ya => radicals[*idx as usize] = Some('ي'),
+                        WeakResolution::WawOrYa => ambiguous = Some(*idx as usize),
+                    }
+                }
             }
         }
-        let radicals: SmallVec<[char; 4]> = radicals.iter().filter_map(|r| *r).collect();
-        if radicals.len() != 3 {
-            return None;
+
+        // Assemble. For an ambiguous (WawOrYa) slot, emit one root per fill.
+        let fills: &[char] = if ambiguous.is_some() {
+            &['و', 'ي']
+        } else {
+            &['\u{0}'] // single pass; the placeholder is never consulted
+        };
+        for &fill in fills {
+            let mut rad: SmallVec<[char; 4]> = SmallVec::new();
+            let mut complete = true;
+            for (i, slot_radical) in radicals.iter().enumerate() {
+                let c = if Some(i) == ambiguous {
+                    Some(fill)
+                } else {
+                    *slot_radical
+                };
+                match c {
+                    Some(ch) => rad.push(ch),
+                    None => {
+                        complete = false;
+                        break;
+                    }
+                }
+            }
+            if complete && rad.len() == 3 {
+                out.push(Root { radicals: rad });
+            }
         }
-        Some(Root { radicals })
+        out
     }
 }
 
@@ -149,10 +222,92 @@ impl PatternTable {
             (10, "افتعال", Pos::Noun, 0.45),  // Form VIII verbal noun
             (11, "استفعال", Pos::Noun, 0.45), // Form X verbal noun
         ];
-        let patterns = specs
+        let mut patterns: Vec<Pattern> = specs
             .iter()
             .map(|&(id, t, pos, prior)| Pattern::parse(id, t, pos, prior))
             .collect();
+
+        // Weak Form-I patterns (built from explicit slots, since their surface
+        // realizations replace radical positions and can't be written in plain
+        // ف/ع/ل notation). Weak analyses get a slightly lower prior — they are
+        // more speculative — but lexicon confirmation promotes the real ones.
+        use WeakResolution::{Waw, WawOrYa, Ya};
+        patterns.push(Pattern::weak(
+            20,
+            "فال (hollow)",
+            &[
+                Slot::Radical(0),
+                Slot::Weak {
+                    idx: 1,
+                    surface: 'ا',
+                    resolves: WawOrYa,
+                },
+                Slot::Radical(2),
+            ],
+            Pos::Verb,
+            0.50,
+        )); // قال -> ق-و-ل / ق-ي-ل
+        patterns.push(Pattern::weak(
+            21,
+            "فعا (defective-w)",
+            &[
+                Slot::Radical(0),
+                Slot::Radical(1),
+                Slot::Weak {
+                    idx: 2,
+                    surface: 'ا',
+                    resolves: Waw,
+                },
+            ],
+            Pos::Verb,
+            0.50,
+        )); // دعا -> د-ع-و
+        patterns.push(Pattern::weak(
+            22,
+            "فعى (defective-y)",
+            &[
+                Slot::Radical(0),
+                Slot::Radical(1),
+                Slot::Weak {
+                    idx: 2,
+                    surface: 'ى',
+                    resolves: Ya,
+                },
+            ],
+            Pos::Verb,
+            0.50,
+        )); // رمى -> ر-م-ي
+        patterns.push(Pattern::weak(
+            23,
+            "وفع (mithal-w)",
+            &[
+                Slot::Weak {
+                    idx: 0,
+                    surface: 'و',
+                    resolves: Waw,
+                },
+                Slot::Radical(1),
+                Slot::Radical(2),
+            ],
+            Pos::Verb,
+            0.45,
+        )); // وصل -> و-ص-ل
+        patterns.push(Pattern::weak(
+            24,
+            "يفع (mithal-y)",
+            &[
+                Slot::Weak {
+                    idx: 0,
+                    surface: 'ي',
+                    resolves: Ya,
+                },
+                Slot::Radical(1),
+                Slot::Radical(2),
+            ],
+            Pos::Verb,
+            0.45,
+        )); // يسر -> ي-س-ر
+
         Self { patterns }
     }
 
@@ -167,7 +322,7 @@ impl PatternTable {
         let chars: Vec<char> = skeleton.chars().collect();
         let mut out: SmallVec<[PatternMatch; 8]> = SmallVec::new();
         for p in &self.patterns {
-            if let Some(root) = p.try_match(&chars) {
+            for root in p.try_match(&chars) {
                 out.push(PatternMatch {
                     pattern: p.id,
                     root,
@@ -205,7 +360,8 @@ mod tests {
     #[test]
     fn table_parses_without_panic() {
         let t = PatternTable::builtin();
-        assert_eq!(t.patterns().len(), 11);
+        // 11 strong + 5 weak (hollow, defective-w/y, mithal-w/y).
+        assert_eq!(t.patterns().len(), 16);
     }
 
     #[test]
@@ -239,14 +395,32 @@ mod tests {
     }
 
     #[test]
-    fn weak_root_is_rejected() {
-        // قال has weak root ق-و-ل; the strong matcher must NOT claim ق-ا-ل.
+    fn hollow_root_enumerates_waw_and_ya() {
+        // قال (hollow): middle weak hides و or ي — enumerate both, never claim ا.
         let table = PatternTable::builtin();
         let m = table.match_skeleton("قال");
+        let roots: Vec<Vec<char>> = m.iter().map(|m| m.root.radicals.to_vec()).collect();
+        assert!(roots.contains(&vec!['ق', 'و', 'ل']), "should yield ق-و-ل");
+        assert!(
+            roots.contains(&vec!['ق', 'ي', 'ل']),
+            "should also enumerate ق-ي-ل"
+        );
         assert!(
             m.iter().all(|m| !m.root.radicals.contains(&'ا')),
-            "must not emit a root containing a long vowel"
+            "must never claim ا as a radical"
         );
+    }
+
+    #[test]
+    fn defective_roots_recover_final_weak() {
+        // ا vs ى distinguishes final-waw from final-ya — recoverable.
+        assert_eq!(root_of("دعا"), vec!['د', 'ع', 'و']);
+        assert_eq!(root_of("رمى"), vec!['ر', 'م', 'ي']);
+    }
+
+    #[test]
+    fn mithal_root_recovers_initial_waw() {
+        assert_eq!(root_of("وصل"), vec!['و', 'ص', 'ل']);
     }
 
     #[test]

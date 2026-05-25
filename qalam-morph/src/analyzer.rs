@@ -179,24 +179,37 @@ impl BasicAnalyzer {
                 }
             }
             None => {
-                // No root. Recognized particle, or genuinely unanalyzed.
-                let key = unicode::strip_tashkil(&unicode::normalize(split.stem.surface.as_str()));
-                match self.lexicon.particle_id(&key) {
-                    Some(eid) => {
-                        provenance.lex_entries.push(eid);
-                        (
+                let norm = unicode::normalize(split.stem.surface.as_str());
+                // 1. Irregular form (e.g. قِ -> و-ق-ي): a lexically-known root
+                //    with no recoverable pattern. Promoted like a confirmed root.
+                if let Some((eid, root)) = self.lexicon.irregular(&norm) {
+                    provenance.lex_entries.push(eid);
+                    (
+                        Some(root),
+                        None,
+                        Some(Pos::Verb),
+                        split.confidence.or(Conf::clamp(LEXICON_CONFIRM)),
+                    )
+                } else {
+                    // 2. Particle, else 3. genuinely unanalyzed.
+                    let key = unicode::strip_tashkil(&norm);
+                    match self.lexicon.particle_id(&key) {
+                        Some(eid) => {
+                            provenance.lex_entries.push(eid);
+                            (
+                                None,
+                                None,
+                                Some(Pos::Part),
+                                split.confidence.or(Conf::clamp(PARTICLE_CONFIRM)),
+                            )
+                        }
+                        None => (
                             None,
                             None,
-                            Some(Pos::Part),
-                            split.confidence.or(Conf::clamp(PARTICLE_CONFIRM)),
-                        )
+                            None,
+                            split.confidence.and(Conf::clamp(UNANALYZED_PENALTY)),
+                        ),
                     }
-                    None => (
-                        None,
-                        None,
-                        None,
-                        split.confidence.and(Conf::clamp(UNANALYZED_PENALTY)),
-                    ),
                 }
             }
         };
@@ -312,15 +325,38 @@ mod tests {
     }
 
     #[test]
-    fn weak_root_word_still_analyzes_without_root() {
+    fn hollow_weak_root_is_confirmed_and_ranks_first() {
         let a = BasicAnalyzer::default();
-        // قال: no strong root, but the forest is non-empty (clitic-level).
-        let forest = a.analyze_token("قال");
-        assert!(!forest.analyses.is_empty());
-        assert!(forest
-            .analyses
-            .iter()
-            .all(|an| an.root.is_none() || !an.root.as_ref().unwrap().radicals.contains(&'ا')));
+        // قال: hollow enumerates ق-و-ل / ق-ي-ل; only ق-و-ل is in the lexicon,
+        // so it is confirmed and ranks first. ا is never claimed as a radical.
+        let top = a
+            .analyze_token("قال")
+            .best()
+            .cloned()
+            .expect("non-empty forest");
+        assert_eq!(
+            top.root.as_ref().map(|r| r.radicals.as_slice()),
+            Some(['ق', 'و', 'ل'].as_slice())
+        );
+        assert!(
+            !top.provenance.lex_entries.is_empty(),
+            "confirmed -> lex entry"
+        );
+    }
+
+    #[test]
+    fn irregular_imperative_resolves_to_root() {
+        let a = BasicAnalyzer::default();
+        // قِ (with kasra) -> و-ق-ي via the irregulars table — the cited case.
+        let top = a
+            .analyze_token("قِ")
+            .best()
+            .cloned()
+            .expect("non-empty forest");
+        assert_eq!(
+            top.root.as_ref().map(|r| r.radicals.as_slice()),
+            Some(['و', 'ق', 'ي'].as_slice())
+        );
     }
 
     #[test]
